@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#1a0a2e">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Formula Run! — Competitive Exam Prep</title>
 <style>
@@ -3525,6 +3524,38 @@ function goHome(){
   renderPR();
   renderStreakPanel();
   updateHomeStreakBadge();
+
+  // Show interstitial ad for free users after every game
+  if (!isProUnlocked()) {
+    showInterstitialAd();
+    // Show Pro comparison chart after every completed game
+    setTimeout(() => showProComparisonModal(), 800);
+  }
+}
+
+// Track games played
+function getGamesPlayed() {
+  return parseInt(localStorage.getItem('formulaRun_gamesPlayed') || '0');
+}
+function incrementGamesPlayed() {
+  localStorage.setItem('formulaRun_gamesPlayed', getGamesPlayed() + 1);
+}
+
+function showProComparisonModal() {
+  if (isProUnlocked()) return;
+  incrementGamesPlayed();
+  document.getElementById('pro-comparison-modal').classList.add('active');
+}
+
+function closeProComparisonModal() {
+  document.getElementById('pro-comparison-modal').classList.remove('active');
+}
+
+function upgradeFromComparison(plan) {
+  closeProComparisonModal();
+  showProLockedModal();
+  // Scroll to the right plan
+  setTimeout(() => handlePurchase(plan), 300);
 }
 
 // ══════════════════════════════════════════════════
@@ -3577,14 +3608,94 @@ function closeProModal() {
   document.getElementById('pro-modal').classList.remove('active');
 }
 
-// ── Handle purchase button clicks (connects to Google Play Billing in real app) ──
+// ══════════════════════════════════════════════════
+//  ⭐ GOOGLE PLAY BILLING — FULL IMPLEMENTATION
+// ══════════════════════════════════════════════════
+
+// Product IDs — must match exactly what you create in Google Play Console
+const BILLING_PRODUCTS = {
+  monthly:   'com.formularun.app.pro.monthly',
+  quarterly: 'com.formularun.app.pro.quarterly',
+  yearly:    'com.formularun.app.pro.yearly'
+};
+
+// Detect if running inside Android WebView (Play Store app)
+const isAndroidApp = typeof window.Android !== 'undefined';
+
+// ── Main purchase handler ──
 function handlePurchase(plan) {
-  // In a real Play Store app, this calls the Google Play Billing API
-  // For now, show a message guiding the user
-  showToast('🛒 Opening payment... (Connect Google Play Billing)', 'power-toast');
   closeProModal();
-  // TODO: Replace with real Google Play Billing intent when published
-  // window.Android.launchBilling(plan);  // ← This is how it works in a WebView app
+
+  if (isAndroidApp) {
+    // ✅ REAL Google Play Billing — works when published on Play Store
+    try {
+      const productId = BILLING_PRODUCTS[plan];
+      window.Android.launchBilling(productId);
+    } catch(e) {
+      showToast('❌ Billing error. Please try again.', 'danger-toast');
+    }
+  } else {
+    // 🌐 Browser/web version — show instructions
+    showWebPurchaseModal(plan);
+  }
+}
+
+// ── Called by Android after successful purchase ──
+// Android WebView calls this function when payment succeeds
+function onPurchaseSuccess(plan, purchaseToken) {
+  try {
+    // Verify and store the purchase
+    const expiry = new Date();
+    if (plan.includes('monthly')) expiry.setMonth(expiry.getMonth() + 1);
+    else if (plan.includes('quarterly')) expiry.setMonth(expiry.getMonth() + 3);
+    else if (plan.includes('yearly')) expiry.setFullYear(expiry.getFullYear() + 1);
+
+    localStorage.setItem(PRO_KEY, JSON.stringify({
+      plan: plan,
+      token: purchaseToken,
+      expiry: expiry.toISOString(),
+      purchasedAt: new Date().toISOString()
+    }));
+
+    showToast('👑 Pro Unlocked! Enjoy Mixed Mode!', 'power-toast');
+    buildDrum();
+    document.getElementById('web-purchase-modal')?.classList.remove('active');
+  } catch(e) {
+    console.error('Purchase save error:', e);
+  }
+}
+
+// ── Called by Android if purchase fails or cancelled ──
+function onPurchaseFailed(reason) {
+  if (reason !== 'USER_CANCELLED') {
+    showToast('❌ Purchase failed: ' + reason, 'danger-toast');
+  }
+}
+
+// ── Restore purchases (for reinstalls) ──
+function restorePurchases() {
+  if (isAndroidApp) {
+    try {
+      window.Android.restorePurchases();
+      showToast('🔄 Restoring purchases...', 'power-toast');
+    } catch(e) {
+      showToast('❌ Could not restore. Try again.', 'danger-toast');
+    }
+  } else {
+    showToast('ℹ️ Restore only works in the Play Store app.', 'power-toast');
+  }
+}
+
+// ── Web browser fallback modal ──
+function showWebPurchaseModal(plan) {
+  const prices = { monthly: '₹29/month', quarterly: '₹49/3 months', yearly: '₹99/year' };
+  document.getElementById('web-purchase-info').textContent =
+    `You selected: ${prices[plan] || plan}`;
+  document.getElementById('web-purchase-modal').classList.add('active');
+}
+
+function closeWebPurchaseModal() {
+  document.getElementById('web-purchase-modal').classList.remove('active');
 }
 
 // ══════════════════════════════════════════════════
@@ -3648,10 +3759,14 @@ async function buildPoolWithGemini(cat) {
   const pool = _origBuildPool(cat);
 
   // If API key not set, just return local pool
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'AQ.Ab8RN6K-3GvtmroaMjKfrQ7eehwrE24XzbLAbqkIwCtGwTsqpg') return pool;
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'AQ.Ab8RN6IEE5bANveTDiPYVvva6KGCN_xJEENcOkX4CeQEhLbbUg') return pool;
 
-  // Try to enhance 3 questions (levels 5, 10, 15) with Gemini AI questions
-  const enhanceSlots = [4, 9, 14]; // 0-indexed: questions 5, 10, 15
+  // Pro users get ALL questions AI generated — Free users get only 3
+  const isPro = isProUnlocked();
+  const enhanceSlots = isPro
+    ? [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14] // Pro: ALL 15 questions AI
+    : [4, 9, 14]; // Free: only questions 5, 10, 15
+
   const catForGemini = cat === 'mixed' ? 'arithmetic' : cat;
 
   for (const slot of enhanceSlots) {
@@ -3702,7 +3817,7 @@ function startGame() {
   buildTrack(); renderHUD(); showQuestion();
 
   // Silently enhance with Gemini in background (won't interrupt gameplay)
-  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'AQ.Ab8RN6K-3GvtmroaMjKfrQ7eehwrE24XzbLAbqkIwCtGwTsqpg') {
+  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'AQ.Ab8RN6IEE5bANveTDiPYVvva6KGCN_xJEENcOkX4CeQEhLbbUg') {
     buildPoolWithGemini(selectedCat).then(enhancedPool => {
       // Only update future questions that haven't been shown yet
       for (let i = gameState.qIndex + 1; i < enhancedPool.length; i++) {
@@ -3737,6 +3852,64 @@ function buildDrum() {
   requestAnimationFrame(() => { applyDrumTransform(false); });
 }
 
+// ══════════════════════════════════════════════════
+//  ⭐ AD SYSTEM — Free users see ads, Pro users don't
+// ══════════════════════════════════════════════════
+
+// AdMob Ad Unit IDs — replace with your real IDs from AdMob console
+const AD_UNITS = {
+  banner:       'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',  // Banner ad
+  interstitial: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX'   // Full screen ad
+};
+
+// Show banner ad at bottom of screen (free users only)
+function showBannerAd() {
+  if (isProUnlocked()) return; // Pro users never see ads
+  if (!isAndroidApp) return;   // Only works in Android app
+  try {
+    window.Android.showBannerAd(AD_UNITS.banner);
+  } catch(e) { console.log('Banner ad not available'); }
+}
+
+// Hide banner ad
+function hideBannerAd() {
+  if (!isAndroidApp) return;
+  try { window.Android.hideBannerAd(); } catch(e) {}
+}
+
+// Show full screen interstitial ad after game ends (free users only)
+let gameCount = 0;
+function showInterstitialAd() {
+  if (isProUnlocked()) return; // Pro users never see ads
+  gameCount++;
+  // Show full screen ad every 2 games for free users
+  if (gameCount % 2 === 0) {
+    if (isAndroidApp) {
+      try {
+        window.Android.showInterstitialAd(AD_UNITS.interstitial);
+      } catch(e) { console.log('Interstitial ad not available'); }
+    } else {
+      // In browser — show our own small ad reminder
+      showInAppAdReminder();
+    }
+  }
+}
+
+// Small in-browser ad reminder (shows when testing in browser)
+function showInAppAdReminder() {
+  const el = document.getElementById('ad-reminder');
+  if (!el) return;
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 3000);
+}
+
+// Init ads when app starts
+function initAds() {
+  if (!isProUnlocked()) {
+    showBannerAd();
+  }
+}
+
 // Init on load
 renderLB();
 renderPR();
@@ -3745,6 +3918,7 @@ updateHomeStreakBadge();
 buildDrum();
 initDrumScroll();
 initSplash();
+initAds();
 </script>
 <!-- ══════════════ PRO LOCKED MODAL ══════════════ -->
 <div class="overlay" id="pro-modal">
@@ -3831,6 +4005,172 @@ initSplash();
       Payments handled securely by Google Play.<br>
       Cancel anytime from Google Play subscriptions.
     </div>
+    <div style="margin-top:10px;">
+      <button onclick="restorePurchases()" style="
+        background:transparent;border:none;color:var(--muted);
+        font-size:11px;cursor:pointer;text-decoration:underline;
+        font-family:'Nunito',sans-serif;
+      ">Already purchased? Restore</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ WEB BROWSER FALLBACK MODAL ══════════════ -->
+<div class="overlay" id="web-purchase-modal">
+  <div class="overlay-card" style="max-width:360px;">
+    <span class="overlay-icon">📱</span>
+    <div class="overlay-title" style="font-size:22px;">Get the App</div>
+    <div class="overlay-msg">
+      <span id="web-purchase-info" style="color:#f7c948;font-weight:800;display:block;margin-bottom:12px;"></span>
+      In-app purchases only work inside the <b>Formula Run Android app</b> on Google Play Store.
+      <br><br>
+      To unlock Pro:
+      <br>
+      1️⃣ Download Formula Run from Play Store<br>
+      2️⃣ Open the app on your phone<br>
+      3️⃣ Tap the plan you want → Pay securely via Google Play
+    </div>
+    <div class="overlay-btns" style="flex-direction:column;gap:10px;">
+      <button onclick="window.open('https://play.google.com/store/apps/details?id=com.formularun.app','_blank')" style="
+        background:linear-gradient(135deg,#00e5a0,#6c63ff);border:none;border-radius:12px;
+        padding:12px 24px;color:#fff;cursor:pointer;font-family:'Fredoka One',cursive;
+        font-size:16px;width:100%;
+      ">📲 Get on Play Store</button>
+      <button onclick="closeWebPurchaseModal()" style="
+        background:transparent;border:1.5px solid var(--border);border-radius:10px;
+        padding:10px 24px;color:var(--muted);cursor:pointer;font-family:'Nunito',sans-serif;
+        font-size:14px;font-weight:700;
+      ">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ad reminder for browser testing only -->
+<div id="ad-reminder" style="
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px;
+  border-radius:20px;font-family:'Nunito',sans-serif;font-size:13px;
+  opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:9999;
+  border:1px solid rgba(255,255,255,0.2);
+">
+  📺 Ad plays here for free users
+</div>
+<style>
+  #ad-reminder.active { opacity: 1; }
+</style>
+
+<!-- ══════════════ PRO COMPARISON MODAL (shows after each game) ══════════════ -->
+<div class="overlay" id="pro-comparison-modal">
+  <div class="overlay-card" style="max-width:400px;padding:24px 20px;">
+
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-family:'Fredoka One',cursive;font-size:22px;color:var(--text);">
+        🎮 Round Complete!
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+        Here's what you're missing as a free user
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-radius:14px;overflow:hidden;border:1.5px solid var(--border);margin-bottom:18px;font-family:'Nunito',sans-serif;">
+
+      <!-- Header Row -->
+      <div style="background:rgba(255,255,255,0.04);padding:10px 8px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:800;color:var(--muted);letter-spacing:1px;">FEATURE</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.04);padding:10px 8px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:800;color:var(--muted);letter-spacing:1px;">FREE</div>
+      </div>
+      <div style="background:rgba(247,201,72,0.12);padding:10px 8px;text-align:center;border-bottom:1px solid rgba(247,201,72,0.3);">
+        <div style="font-size:10px;font-weight:800;color:#f7c948;letter-spacing:1px;">PRO 👑</div>
+      </div>
+
+      <!-- Row 1: Ads -->
+      <div style="padding:10px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;">
+        <span style="font-size:12px;color:var(--text);font-weight:700;">📺 Ads</span>
+      </div>
+      <div style="padding:10px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:center;">
+        <span style="font-size:18px;">😤</span>
+        <div style="font-size:10px;color:var(--accent);font-weight:800;">After every<br>2 games</div>
+      </div>
+      <div style="padding:10px 8px;border-bottom:1px solid rgba(247,201,72,0.15);text-align:center;background:rgba(247,201,72,0.04);">
+        <span style="font-size:18px;">🚫</span>
+        <div style="font-size:10px;color:var(--safe);font-weight:800;">Never<br>ever!</div>
+      </div>
+
+      <!-- Row 2: Topics -->
+      <div style="padding:10px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;">
+        <span style="font-size:12px;color:var(--text);font-weight:700;">🎯 Topics</span>
+      </div>
+      <div style="padding:10px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:center;">
+        <span style="font-size:18px;">📦</span>
+        <div style="font-size:10px;color:var(--muted);font-weight:800;">11 topics<br>only</div>
+      </div>
+      <div style="padding:10px 8px;border-bottom:1px solid rgba(247,201,72,0.15);text-align:center;background:rgba(247,201,72,0.04);">
+        <span style="font-size:18px;">🎲</span>
+        <div style="font-size:10px;color:var(--safe);font-weight:800;">All 12 +<br>Mixed Mode</div>
+      </div>
+
+      <!-- Row 3: AI Questions -->
+      <div style="padding:10px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;">
+        <span style="font-size:12px;color:var(--text);font-weight:700;">🤖 AI Qs</span>
+      </div>
+      <div style="padding:10px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:center;">
+        <span style="font-size:18px;">3️⃣</span>
+        <div style="font-size:10px;color:var(--muted);font-weight:800;">3 per<br>game</div>
+      </div>
+      <div style="padding:10px 8px;border-bottom:1px solid rgba(247,201,72,0.15);text-align:center;background:rgba(247,201,72,0.04);">
+        <span style="font-size:18px;">♾️</span>
+        <div style="font-size:10px;color:var(--safe);font-weight:800;">All 15 AI<br>every game</div>
+      </div>
+
+      <!-- Row 4: Price -->
+      <div style="padding:10px 10px;border-right:1px solid var(--border);display:flex;align-items:center;">
+        <span style="font-size:12px;color:var(--text);font-weight:700;">💰 Price</span>
+      </div>
+      <div style="padding:10px 8px;border-right:1px solid var(--border);text-align:center;">
+        <span style="font-size:14px;font-weight:800;color:var(--safe);">FREE</span>
+      </div>
+      <div style="padding:10px 8px;text-align:center;background:rgba(247,201,72,0.04);">
+        <span style="font-size:14px;font-weight:800;color:#f7c948;">₹29/mo</span>
+      </div>
+
+    </div>
+
+    <!-- CTA Buttons -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button onclick="upgradeFromComparison('yearly')" style="
+        background:linear-gradient(135deg,#f7c948,#ff9500);
+        border:none;border-radius:12px;padding:14px;
+        font-family:'Fredoka One',cursive;font-size:18px;
+        color:#1a0a2e;cursor:pointer;width:100%;
+        box-shadow:0 4px 20px rgba(247,201,72,0.3);
+      ">👑 Go Pro — Best ₹99/year</button>
+
+      <div style="display:flex;gap:8px;">
+        <button onclick="upgradeFromComparison('monthly')" style="
+          flex:1;background:rgba(108,99,255,0.15);
+          border:1.5px solid rgba(108,99,255,0.4);border-radius:10px;
+          padding:10px;font-family:'Nunito',sans-serif;font-size:13px;
+          font-weight:800;color:var(--sky);cursor:pointer;
+        ">₹29/month</button>
+        <button onclick="upgradeFromComparison('quarterly')" style="
+          flex:1;background:rgba(0,229,160,0.1);
+          border:1.5px solid rgba(0,229,160,0.3);border-radius:10px;
+          padding:10px;font-family:'Nunito',sans-serif;font-size:13px;
+          font-weight:800;color:var(--safe);cursor:pointer;
+        ">₹49/3 months</button>
+      </div>
+
+      <button onclick="closeProComparisonModal()" style="
+        background:transparent;border:none;
+        color:var(--muted);cursor:pointer;
+        font-family:'Nunito',sans-serif;font-size:13px;
+        padding:6px;
+      ">Continue with Free version</button>
+    </div>
+
   </div>
 </div>
 

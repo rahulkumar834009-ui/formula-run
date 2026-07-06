@@ -3539,9 +3539,9 @@ function shuffle(arr){
 
 // ══════════════════════════════════════════════════
 //  ⭐ GEMINI API CONFIGURATION
-//  Replace YOUR_GEMINI_API_KEY_HERE with your key from aistudio.google.com
+//  Replace AQ.Ab8RN6K-3GvtmroaMjKfrQ7eehwrE24XzbLAbqkIwCtGwTsqpg with your key from aistudio.google.com
 // ══════════════════════════════════════════════════
-const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY_HERE';
+const GEMINI_API_KEY = 'AQ.Ab8RN6K-3GvtmroaMjKfrQ7eehwrE24XzbLAbqkIwCtGwTsqpg';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 // ══════════════════════════════════════════════════
@@ -3647,7 +3647,7 @@ async function buildPoolWithGemini(cat) {
   const pool = _origBuildPool(cat);
 
   // If API key not set, just return local pool
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') return pool;
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'AQ.Ab8RN6K-3GvtmroaMjKfrQ7eehwrE24XzbLAbqkIwCtGwTsqpg') return pool;
 
   // Try to enhance 3 questions (levels 5, 10, 15) with Gemini AI questions
   const enhanceSlots = [4, 9, 14]; // 0-indexed: questions 5, 10, 15
@@ -3701,7 +3701,7 @@ function startGame() {
   buildTrack(); renderHUD(); showQuestion();
 
   // Silently enhance with Gemini in background (won't interrupt gameplay)
-  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE') {
+  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'AQ.Ab8RN6K-3GvtmroaMjKfrQ7eehwrE24XzbLAbqkIwCtGwTsqpg') {
     buildPoolWithGemini(selectedCat).then(enhancedPool => {
       // Only update future questions that haven't been shown yet
       for (let i = gameState.qIndex + 1; i < enhancedPool.length; i++) {

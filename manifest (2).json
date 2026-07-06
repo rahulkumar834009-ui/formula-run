@@ -1,0 +1,17 @@
+{
+  "background_color": "#1a0a2e",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "Formula Run",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "Formula Run",
+  "start_url": "/",
+  "theme_color": "#1a0a2e",
+  "description": "Speed maths app increase your maths speed",
+  "lang": "en",
+  "categories": [
+    "education"
+  ],
+  "id": "com.formularun.app"
+}

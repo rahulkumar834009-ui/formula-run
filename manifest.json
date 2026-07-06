@@ -1,17 +1,25 @@
 {
-  "background_color": "#1a0a2e",
-  "dir": "ltr",
-  "display": "standalone",
   "name": "Formula Run",
-  "orientation": "any",
-  "scope": "/",
   "short_name": "Formula Run",
-  "start_url": "/",
-  "theme_color": "#1a0a2e",
   "description": "Speed maths app increase your maths speed",
-  "lang": "en",
-  "categories": [
-    "education"
-  ],
-  "id": "com.formularun.app"
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a0a2e",
+  "theme_color": "#1a0a2e",
+  "orientation": "portrait",
+  "id": "com.formularun.app",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }
